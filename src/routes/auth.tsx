@@ -1,0 +1,146 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
+import { toast } from "sonner";
+
+export const Route = createFileRoute("/auth")({
+  head: () => ({
+    meta: [
+      { title: "Acesso administrativo" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
+  component: AuthPage,
+});
+
+function AuthPage() {
+  const navigate = useNavigate();
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) navigate({ to: "/admin" });
+    });
+  }, [navigate]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      if (mode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        toast.success("Sessão iniciada.");
+        navigate({ to: "/admin" });
+      } else {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: `${window.location.origin}/admin` },
+        });
+        if (error) throw error;
+        toast.success("Conta criada. Você já pode entrar.");
+        setMode("login");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha na autenticação.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogle() {
+    setLoading(true);
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: `${window.location.origin}/admin`,
+    });
+    if (result.error) {
+      toast.error("Falha no login com Google.");
+      setLoading(false);
+      return;
+    }
+    if (result.redirected) return;
+    navigate({ to: "/admin" });
+  }
+
+  return (
+    <section className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-6 py-16">
+      <div className="font-mono-tech text-xs uppercase tracking-widest text-brand">
+        [ admin ] acesso restrito
+      </div>
+      <h1 className="mt-3 text-3xl font-light text-foreground">
+        {mode === "login" ? "Entrar no painel" : "Criar conta"}
+      </h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Área administrativa do portfólio. Apenas administradores autorizados podem gerenciar
+        serviços e mídias.
+      </p>
+
+      <button
+        type="button"
+        onClick={handleGoogle}
+        disabled={loading}
+        className="mt-8 flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-50"
+      >
+        <svg viewBox="0 0 24 24" className="size-4" aria-hidden>
+          <path fill="#4285F4" d="M22.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h5.9c-.3 1.4-1 2.5-2.2 3.3v2.8h3.5c2.1-1.9 3.3-4.7 3.3-8.3z"/>
+          <path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.6l-3.5-2.8c-1 .7-2.3 1.1-3.7 1.1-2.8 0-5.3-1.9-6.1-4.5H2.3v2.8C4.1 20.6 7.8 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.9 14.2c-.2-.6-.3-1.3-.3-2.2s.1-1.5.3-2.2V7H2.3C1.5 8.5 1 10.2 1 12s.5 3.5 1.3 5l3.6-2.8z"/>
+          <path fill="#EA4335" d="M12 5.4c1.6 0 3 .5 4.1 1.6l3.1-3.1C17.4 2.1 14.9 1 12 1 7.8 1 4.1 3.4 2.3 7l3.6 2.8C6.7 7.3 9.2 5.4 12 5.4z"/>
+        </svg>
+        Continuar com Google
+      </button>
+
+      <div className="my-6 flex items-center gap-3">
+        <div className="h-px flex-1 bg-border" />
+        <span className="font-mono-tech text-[10px] uppercase tracking-widest text-muted-foreground">
+          ou e-mail
+        </span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <label className="font-mono-tech text-[10px] uppercase tracking-widest text-muted-foreground">
+          E-mail
+        </label>
+        <input
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-none"
+        />
+        <label className="mt-2 font-mono-tech text-[10px] uppercase tracking-widest text-muted-foreground">
+          Senha
+        </label>
+        <input
+          type="password"
+          required
+          minLength={6}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-brand focus:outline-none"
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          className="mt-4 rounded-full bg-brand px-5 py-2.5 font-mono-tech text-xs uppercase tracking-widest text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {loading ? "Aguarde..." : mode === "login" ? "Entrar →" : "Criar conta →"}
+        </button>
+      </form>
+
+      <button
+        type="button"
+        onClick={() => setMode(mode === "login" ? "signup" : "login")}
+        className="mt-6 text-center text-xs text-muted-foreground transition-colors hover:text-brand"
+      >
+        {mode === "login" ? "Não tem conta? Criar →" : "Já tem conta? Entrar →"}
+      </button>
+    </section>
+  );
+}
